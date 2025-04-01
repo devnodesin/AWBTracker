@@ -321,10 +321,12 @@ def submit_tracking_form(tracking_number, captcha_answer, html_content):
         
         # Print form data for debugging
         # Save the form data to a file for debugging
+        '''
         form_data_path = os.path.join("out", "indiapost_formdata.json")
         with open(form_data_path, "w") as f:
             f.write(str(form_data))
-        #print(f"Form data saved to {form_data_path}")        
+        print(f"Form data saved to {form_data_path}")'
+        '''
 
         # Submit the form
         print(f"Submitting form")
@@ -447,7 +449,7 @@ def get_delivery_status(content, tracking_number):
         # Keep as "transit" for all other statuses
         
         # Create result dictionary
-        result = {
+        tracking_info = {
             "tracking_number": tracking_number,
             "status": status_category,
             "location": details_table_json.get("delivery_location", "") if details_table_json else "",
@@ -458,7 +460,7 @@ def get_delivery_status(content, tracking_number):
         # Print the result for debugging
         #print(f"Delivery Status: {result}")
         
-        return result
+        return tracking_info
     
     except Exception as e:
         print(f"Error extracting delivery status: {e}")
@@ -530,15 +532,6 @@ class IndiaPostTracker:
     """
     
     def track(self, awb_number):
-        """
-        Track an India Post AWB number.
-        
-        Args:
-            awb_number (str): The AWB tracking number
-            
-        Returns:
-            dict: Tracking status information
-        """
         # Call the track_consignment function to get real tracking data
         tracking_result = track_consignment(awb_number)
         return tracking_result

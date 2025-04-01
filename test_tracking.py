@@ -8,8 +8,7 @@ if __name__ == '__main__':
 
     # Example AWB numbers for testing
     awb_numbers = {
-        "IndiaPost": "ET123585189IN",
-        "EcomExpress": "3401239089"
+        "dtdc": "C45160501"
     }
 
     # Track each AWB number using the appropriate courier service

@@ -1,5 +1,6 @@
 from .indiapost import IndiaPostTracker
 from .ecomexpress import EcomExpressTracker
+from .dtdc import DTDCTracker
 
 class AWBTracker:
     """
@@ -13,6 +14,7 @@ class AWBTracker:
         self.trackers = {
             "indiapost": IndiaPostTracker(),
             "ecomexpress": EcomExpressTracker(),
+            "dtdc": DTDCTracker(),
         }
 
     def __getattr__(self, courier_name):

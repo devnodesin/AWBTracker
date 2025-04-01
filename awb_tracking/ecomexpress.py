@@ -1,5 +1,6 @@
 import requests
 import json
+import os
 
 '''
 Install required packages using pip:
@@ -12,15 +13,6 @@ class EcomExpressTracker:
     """
 
     def track(self, awb_number):
-        """
-        Track an EcomExpress AWB number.
-        
-        Args:
-            awb_number (str): The AWB tracking number
-            
-        Returns:
-            dict: Tracking status information
-        """
         # In a real implementation, this would make an API call to EcomExpress
         # For demonstration, we'll return a mock response
         # API endpoint for EcomExpress tracking
@@ -36,9 +28,17 @@ class EcomExpressTracker:
             
             # Parse the JSON response
             data = response.json()
-            
+           
             if data.get("success"):
                 result = data.get("result", {})
+
+                # Save tracking result to JSON file
+                try:
+                    # Write tracking info to JSON file
+                    with open("out/ecomexpress_tracking.json", "w") as f:
+                        json.dump(result, f, indent=4)
+                except Exception as e:
+                    print(f"Error saving tracking info to file: {str(e)}")
                 
                 # Get the latest status (last item in shipment_status array)
                 shipment_status = result.get("shipment_status", [])
@@ -47,17 +47,25 @@ class EcomExpressTracker:
                 # Create a dictionary with the tracking information
                 tracking_info = {
                     "tracking_number": awb_number,
-                    "status": latest_status.get("external_status_desc", "Unknown"),
-                    "location": latest_status.get("service_center_name", "Unknown"),
-                    "date_time": latest_status.get("scan_date", "Unknown"),
+                    "status": latest_status.get("external_status_desc", ""),
+                    "location": latest_status.get("service_center_name", ""),
+                    "date_time": latest_status.get("scan_date", ""),
                     "status_txt": result  # Including the full details for reference
                 }
-                
+                                
                 # Return the tracking information as a JSON string
-                return json.dumps(tracking_info)
-            else:
-                return json.dumps({"error": "Failed to retrieve tracking information", "details": data})
+                return tracking_info
+
+            return {
+                "tracking_number": awb_number,
+                "status": "error",
+                "status_txt": f"Error extracting status: {data}"
+            }
                 
         except requests.RequestException as e:
-            return json.dumps({"error": f"Request failed: {str(e)}"})
+            return {
+                "tracking_number": awb_number,
+                "status": "error",
+                "status_txt": f"Request failed: {str(e)}"
+            }
 

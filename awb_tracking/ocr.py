@@ -3,20 +3,15 @@ OCR utilities for processing India Post captcha images.
 """
 import easyocr
 import os
-import base64
-import urllib.request
-import logging
 from PIL import Image
+import pytesseract
+import cv2
+import numpy as np
 
 
 def convert_to_jpg(image_path, output_jpg=None):
     """
-    Convert image to JPG format for better OCR processing.
-    
-    Args:
-        image_path: Path to the source image
-        output_jpg: Path for output JPG (if None, uses out/captcha.jpg)
-        
+    Convert image (gif,png) to JPG format for better OCR processing.
     Returns:
         Path to the JPG image
     """
@@ -43,9 +38,6 @@ def convert_to_jpg(image_path, output_jpg=None):
     # Generate output filename if not provided
     if not output_jpg:
         output_dir = "out"
-        # Create output directory if it doesn't exist
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
         output_jpg = os.path.join(output_dir, "captcha.jpg")
     
     try:
@@ -76,9 +68,9 @@ def convert_to_jpg(image_path, output_jpg=None):
         print(f"Image conversion failed: {e}")
         return None
 
-def ocr_processor(image_path):
+def ocr_easyocr(image_path, debug=False):
     """
-    Process captcha image and extract text using OCR.       
+    Process captcha image and extract text using EasyOCR.
     Returns:
         Extracted text string or None if processing failed
     """
@@ -98,7 +90,8 @@ def ocr_processor(image_path):
         try:
             with Image.open(jpg_path) as test_img:
                 img_width, img_height = test_img.size
-                print(f"Image dimensions: {img_width}x{img_height}")
+                if debug:
+                    print(f"Image dimensions: {img_width}x{img_height}")
         except Exception as img_error:
             print(f"Failed to verify image before OCR: {img_error}")
             return None
@@ -107,13 +100,15 @@ def ocr_processor(image_path):
         reader = easyocr.Reader(['en'], gpu=False, verbose=False)
         
         # Perform OCR
-        print(f"Processing image with EasyOCR: {jpg_path}")
+        if debug:
+            print(f"Processing image with EasyOCR: {jpg_path}")
         results = reader.readtext(jpg_path)
         
         # Process results - combine all detections and remove spaces
         if results:
             text = "".join([detection[1].replace(" ", "") for detection in results])
-            print(f"OCR extracted: '{text}'")
+            if debug:
+                print(f"OCR extracted: '{text}'")
             return text
         else:
             print("No text detected in captcha")
@@ -125,3 +120,91 @@ def ocr_processor(image_path):
         import traceback
         traceback.print_exc()
         return None
+
+def opencv_preprocess_image(image):
+    """
+    Preprocess image for better OCR results with Tesseract.
+    
+    Args:
+        image: PIL Image object
+        
+    Returns:
+        Preprocessed PIL Image
+    """
+    # Convert PIL Image to cv2 format
+    img = np.array(image)
+    
+    # Convert to grayscale if it's not already
+    if len(img.shape) == 3:
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    
+    # Apply thresholding to make text more distinct
+    _, img = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    
+    # Optional: Remove noise
+    img = cv2.medianBlur(img, 3)
+    
+    # Convert back to PIL Image
+    return Image.fromarray(img)
+
+def ocr_tesseract(image_path, debug=False):
+    """
+    Process captcha image and extract text using Tesseract OCR.
+    
+    Args:
+        image_path: Path to the image file
+        debug: Whether to print debug information
+        
+    Returns:
+        Extracted text string or None if processing failed
+    """
+    try:
+        # Open the image
+        image = Image.open(image_path)
+        
+        # Print image info if debug is enabled
+        if debug:
+            print(f"Image format: {image.format}, Size: {image.size}, Mode: {image.mode}")
+        
+        # Preprocess the image for better OCR results
+        preprocessed = opencv_preprocess_image(image)
+        
+        # Save preprocessed image if debug is enabled
+        if debug:
+            debug_path = f"{os.path.splitext(image_path)[0]}_preprocessed.png"
+            preprocessed.save(debug_path)
+            print(f"Saved preprocessed image to {debug_path}")
+        
+        # Configure Tesseract options for captcha
+        config = '--psm 8 --oem 3 -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+        
+        # Use Tesseract to do OCR with custom configuration
+        text = pytesseract.image_to_string(image, config=config)
+        
+        # Clean up the result
+        text = text.strip()
+        
+        if debug:
+            print(f"Tesseract OCR results: '{text}'")
+            
+        return text
+    except Exception as e:
+        print(f"Error processing {image_path} with Tesseract: {e}")
+        return None
+
+def ocr_processor(image_path, ocr="easyocr", debug=True):
+    """
+    Process captcha image and extract text using the specified OCR engine.
+    
+    Args:
+        image_path: Path to the image file
+        ocr: OCR engine to use ('tesseract' or 'easyocr')
+        debug: Whether to print debug information
+        
+    Returns:
+        Extracted text string or None if processing failed
+    """
+    if ocr.lower() == "easyocr":
+        return ocr_easyocr(image_path, debug)
+    else:  # default to tesseract
+        return ocr_tesseract(image_path, debug)

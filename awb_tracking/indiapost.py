@@ -321,7 +321,7 @@ def submit_tracking_form(tracking_number, captcha_answer, html_content):
         
         # Print form data for debugging
         # Save the form data to a file for debugging
-        form_data_path = os.path.join("out", "form_data.html")
+        form_data_path = os.path.join("out", "indiapost_formdata.json")
         with open(form_data_path, "w") as f:
             f.write(str(form_data))
         #print(f"Form data saved to {form_data_path}")        
@@ -340,7 +340,7 @@ def submit_tracking_form(tracking_number, captcha_answer, html_content):
             print("Form submitted successfully")
             
         # Save the response
-        save_content(response.content, os.path.join("out", "tracking_result.html"))
+        save_content(response.content, os.path.join("out", "indiapost_tracking_result.html"))
         
         return response.content
     except Exception as e:
@@ -348,6 +348,55 @@ def submit_tracking_form(tracking_number, captcha_answer, html_content):
         import traceback
         traceback.print_exc()
         return None
+
+def details_tables_to_json(content):
+    print(f"Parsing details table from content...")
+    try:
+        detail_soup = BeautifulSoup(content, 'html.parser')
+        table_rows = detail_soup.find_all('tr')
+
+        result = {}  # Change this from list to dictionary
+        
+        if len(table_rows) > 1:  # Ensure we have header and data rows
+            # Get column headers (from first row th elements)
+            headers = [th.get_text().strip() for th in table_rows[0].find_all('th')]
+            
+            # Get data from second row (first data row)
+            data_cells = table_rows[1].find_all('td')
+            data_values = [td.get_text().strip() for td in data_cells]
+            
+            # Create dictionary from headers and values
+            detail_dict = dict(zip(headers, data_values))
+            
+            # Add these details to our result
+            result["booked_at"] = detail_dict.get("Booked At", "")
+            result["booked_on"] = detail_dict.get("Booked On", "")
+            result["destination_pincode"] = detail_dict.get("Destination Pincode", "")
+            result["article_type"] = detail_dict.get("Article Type", "")
+            result["delivery_location"] = detail_dict.get("Delivery Location", "")
+            result["delivery_time"] = detail_dict.get("Delivery Confirmed On", "")
+            
+            # Set the date_time field to the delivery or booking time
+            if detail_dict.get("Delivery Confirmed On"):
+                result["date_time"] = detail_dict.get("Delivery Confirmed On")
+            else:
+                result["date_time"] = detail_dict.get("Booked On", "")
+                
+            # Set the location field
+            if detail_dict.get("Delivery Location"):
+                result["location"] = detail_dict.get("Delivery Location")
+            else:
+                result["location"] = detail_dict.get("Booked At", "")
+                
+            # Add the full details dictionary to the result
+            result["details"] = detail_dict
+            
+            #print(f"Extracted shipping details: {detail_dict}")
+            
+        return result  # Add a return statement
+    except Exception as e:
+        print(f"Error parsing detail table: {e}")
+        return None  # Return None on error
 
 def get_delivery_status(content, tracking_number):
     """
@@ -363,21 +412,26 @@ def get_delivery_status(content, tracking_number):
     try:
         # ID of the status element
         status_element_id = "ctl00_PlaceHolderMain_ucNewLegacyControl_lblMailArticleCurrentStatusOER"
-        
-        # Extract the HTML content of the status element
-        status_html = get_html_value_by_id(content, status_element_id)
+        delivery_status = get_html_value_by_id(content, status_element_id)
         
         # If status element was not found or is empty
-        if not status_html:
+        if not delivery_status:
             print("Status information not found in the response")
             return {
                 "tracking_number": tracking_number,
                 "status": "unknown",
                 "status_txt": "Status information not available"
             }
-        
+
+        # ID of the status element
+        detail_table_id = "ctl00_PlaceHolderMain_ucNewLegacyControl_gvTrckMailArticleDtlsOER"
+        detail_table = get_html_value_by_id(content, detail_table_id)
+        if detail_table:
+            details_table_json = details_tables_to_json(detail_table)
+            #print(f"Details Table JSON: {details_table_json}")
+                    
         # Clean up the status text
-        status_text = status_html.strip()
+        status_text = delivery_status.strip()
         
         # Determine the status category
         status_category = "transit"  # Default status
@@ -396,11 +450,13 @@ def get_delivery_status(content, tracking_number):
         result = {
             "tracking_number": tracking_number,
             "status": status_category,
-            "status_txt": status_text
+            "location": details_table_json.get("delivery_location", "") if details_table_json else "",
+            "date_time": details_table_json.get("date_time", "") if details_table_json else "",
+            "status_txt": details_table_json
         }
         
         # Print the result for debugging
-        print(f"Delivery Status: {result}")
+        #print(f"Delivery Status: {result}")
         
         return result
     
